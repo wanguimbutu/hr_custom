@@ -1,5 +1,6 @@
 {
  "actions": [],
+ "allow_import": 1,
  "allow_rename": 1,
  "creation": "2026-07-23 11:22:32.913527",
  "doctype": "DocType",
@@ -38,7 +39,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-23 11:24:10.630124",
+ "modified": "2026-07-23 23:02:38.623513",
  "modified_by": "Administrator",
  "module": "hr custom",
  "name": "Lunch Log",
@@ -61,5 +62,6 @@
  "rows_threshold_for_grid_search": 20,
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": []
+ "states": [],
+ "track_changes": 1
 }

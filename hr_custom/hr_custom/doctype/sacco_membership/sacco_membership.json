@@ -1,5 +1,6 @@
 {
  "actions": [],
+ "allow_import": 1,
  "allow_rename": 1,
  "creation": "2026-07-23 12:53:57.521168",
  "doctype": "DocType",
@@ -50,7 +51,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-23 12:55:51.829353",
+ "modified": "2026-07-23 23:03:14.490253",
  "modified_by": "Administrator",
  "module": "hr custom",
  "name": "Sacco Membership",
@@ -73,5 +74,6 @@
  "rows_threshold_for_grid_search": 20,
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": []
+ "states": [],
+ "track_changes": 1
 }
