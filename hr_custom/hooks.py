@@ -149,8 +149,9 @@ app_license = "mit"
 # ---------------
 scheduler_events = {
     "cron": {
-        "0 6 25 * *": [  # 6am on the 25th, adjust to suit your payroll cutoff
-            "hr_custom.hr_custom.lunch_payroll.scheduled_lunch_deduction_run"
+        "0 6 25 * *": [
+            "hr_custom.hr_custom.lunch_payroll.scheduled_lunch_deduction_run",
+            "hr_custom.hr_custom.recurring_deductions.create_recurring_deductions"
         ]
     }
 }
