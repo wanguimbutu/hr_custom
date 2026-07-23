@@ -147,7 +147,13 @@ app_license = "mit"
 
 # Scheduled Tasks
 # ---------------
-
+scheduler_events = {
+    "cron": {
+        "0 6 25 * *": [  # 6am on the 25th, adjust to suit your payroll cutoff
+            "hr_custom.hr_custom.lunch_payroll.scheduled_lunch_deduction_run"
+        ]
+    }
+}
 # scheduler_events = {
 # 	"all": [
 # 		"hr_custom.tasks.all"
