@@ -1,38 +1,41 @@
 import frappe
-from frappe.utils import today, now_datetime, get_datetime
+from frappe.utils import today, get_datetime
 
 @frappe.whitelist()
-def get_checkin_dashboard_data():
-    checkins_today = frappe.get_all(
+def get_checkin_dashboard_data(from_date=None, to_date=None):
+    from_date = from_date or today()
+    to_date = to_date or today()
+
+    start = f"{from_date} 00:00:00"
+    end = f"{to_date} 23:59:59"
+
+    checkins = frappe.get_all(
         "Employee Checkin",
-        filters={"time": ["between", [f"{today()} 00:00:00", f"{today()} 23:59:59"]]},
+        filters={"time": ["between", [start, end]]},
         fields=["employee", "employee_name", "time", "log_type", "device_id"],
         order_by="time desc"
     )
 
-    total_today = len(checkins_today)
-    ins_today = len([c for c in checkins_today if c.log_type == "IN"])
-    outs_today = len([c for c in checkins_today if c.log_type == "OUT"])
-    blank_log_type_today = len([c for c in checkins_today if not c.log_type])
+    total = len(checkins)
+    ins = len([c for c in checkins if c.log_type == "IN"])
+    outs = len([c for c in checkins if c.log_type == "OUT"])
+    blank_log_type = len([c for c in checkins if not c.log_type])
 
-    unique_employees_today = len(set(c.employee for c in checkins_today))
+    unique_employees = len(set(c.employee for c in checkins))
     total_active = frappe.db.count("Employee", {"status": "Active"})
 
-
-    recent = frappe.get_all(
-        "Employee Checkin",
-        fields=["employee", "employee_name", "time", "log_type", "device_id"],
-        order_by="time desc",
-        limit=20
-    )
+    # cap the feed so wide ranges don't blow up the page
+    recent = checkins[:100]
 
     return {
-        "date": today(),
-        "total_today": total_today,
-        "ins_today": ins_today,
-        "outs_today": outs_today,
-        "blank_log_type_today": blank_log_type_today,
-        "unique_employees_today": unique_employees_today,
+        "from_date": str(from_date),
+        "to_date": str(to_date),
+        "total": total,
+        "ins": ins,
+        "outs": outs,
+        "blank_log_type": blank_log_type,
+        "unique_employees": unique_employees,
         "total_active_employees": total_active,
-        "recent": recent
+        "recent": recent,
+        "truncated": total > 100
     }
