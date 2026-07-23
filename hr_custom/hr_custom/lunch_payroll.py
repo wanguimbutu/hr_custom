@@ -19,10 +19,10 @@ def create_lunch_deductions(month_date=None, company=None):
         company = frappe.db.get_single_value("Global Defaults", "default_company")
 
     counts = frappe.db.sql("""
-        SELECT employee, COUNT(*) as plates
-        FROM `tabLunch Log`
-        WHERE date BETWEEN %s AND %s
-        GROUP BY employee
+        SELECT employee, SUM(plates) as plates
+		FROM `tabLunch Log`
+		WHERE date BETWEEN %s AND %s
+		GROUP BY employee
     """, (period_start, period_end), as_dict=True)
 
     created, skipped, errors = [], [], []

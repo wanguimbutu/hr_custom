@@ -9,7 +9,8 @@
   "employee",
   "employee_name",
   "date",
-  "company"
+  "company",
+  "plate"
  ],
  "fields": [
   {
@@ -34,12 +35,17 @@
    "fieldtype": "Link",
    "label": "Company",
    "options": "Company"
+  },
+  {
+   "fieldname": "plate",
+   "fieldtype": "Int",
+   "label": "Plate"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-23 23:02:38.623513",
+ "modified": "2026-07-23 23:07:24.836473",
  "modified_by": "Administrator",
  "module": "hr custom",
  "name": "Lunch Log",
