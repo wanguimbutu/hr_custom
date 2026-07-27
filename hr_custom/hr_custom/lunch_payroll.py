@@ -67,6 +67,7 @@ def create_lunch_deductions(month_date=None, company=None):
             doc.amount = amount
             doc.payroll_date = period_end
             doc.company = company or frappe.db.get_value("Employee", employee, "company")
+            doc.overwrite_salary_structure_amount = 0
             doc.insert(ignore_permissions=True)
             doc.submit()
             created.append(employee)

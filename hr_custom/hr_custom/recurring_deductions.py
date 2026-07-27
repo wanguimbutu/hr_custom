@@ -1,6 +1,7 @@
 import frappe
 from frappe.utils import flt, get_last_day, getdate, today
 
+
 @frappe.whitelist()
 def create_recurring_deductions(month_date=None, company=None):
     month_date = getdate(month_date) if month_date else getdate(today())
@@ -53,6 +54,7 @@ def _process_loans(period_end, company):
             doc.company = company or frappe.db.get_value("Employee", loan.employee, "company")
             doc.reference_doctype = "Staff Loan"
             doc.reference_name = loan.name
+            doc.overwrite_salary_structure_amount = 0
             doc.insert(ignore_permissions=True)
             doc.submit()
             created.append(loan.employee)
@@ -102,6 +104,7 @@ def _process_sacco(period_end, company):
             doc.amount = m.monthly_contribution
             doc.payroll_date = period_end
             doc.company = company or frappe.db.get_value("Employee", m.employee, "company")
+            doc.overwrite_salary_structure_amount = 0
             doc.insert(ignore_permissions=True)
             doc.submit()
             created.append(m.employee)
