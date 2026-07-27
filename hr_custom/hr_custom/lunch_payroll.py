@@ -1,15 +1,20 @@
 import frappe
 from frappe.utils import flt, get_first_day, get_last_day, getdate
 
-LUNCH_COMPONENT = "Lunch Deduction"   # must exist as a Salary Component (Deduction)
+LUNCH_COMPONENT = "Lunch Deduction"
 PLATE_RATE = 20
+
 
 @frappe.whitelist()
 def create_lunch_deductions(month_date=None, company=None):
     """
     Sums Lunch Log entries for the month containing month_date and creates
     one Additional Salary (Deduction) per employee for that payroll period.
-    month_date: any date within the target month (defaults to today).
+
+    Employees with no active Salary Structure Assignment covering the period
+    are SKIPPED (no Additional Salary created for them) and reported back
+    separately as warnings, rather than being treated as errors or halting
+    the batch.
     """
     month_date = getdate(month_date) if month_date else getdate()
     period_start = get_first_day(month_date)
@@ -20,16 +25,30 @@ def create_lunch_deductions(month_date=None, company=None):
 
     counts = frappe.db.sql("""
         SELECT employee, SUM(plates) as plates
-		FROM `tabLunch Log`
-		WHERE date BETWEEN %s AND %s
-		GROUP BY employee
+        FROM `tabLunch Log`
+        WHERE date BETWEEN %s AND %s
+        GROUP BY employee
     """, (period_start, period_end), as_dict=True)
 
-    created, skipped, errors = [], [], []
+    # Pre-fetch everyone who HAS a valid Salary Structure Assignment for this period,
+    # so we're not running a query per employee inside the loop.
+    assigned = frappe.get_all(
+        "Salary Structure Assignment",
+        filters={"from_date": ["<=", period_end], "docstatus": 1},
+        fields=["employee"],
+        distinct=True
+    )
+    has_structure = {a.employee for a in assigned}
+
+    created, skipped_existing, no_structure, errors = [], [], [], []
 
     for row in counts:
         employee = row.employee
         amount = flt(row.plates) * PLATE_RATE
+
+        if employee not in has_structure:
+            no_structure.append(employee)
+            continue
 
         if frappe.db.exists("Additional Salary", {
             "employee": employee,
@@ -37,7 +56,7 @@ def create_lunch_deductions(month_date=None, company=None):
             "payroll_date": period_end,
             "docstatus": ["!=", 2]
         }):
-            skipped.append(employee)
+            skipped_existing.append(employee)
             continue
 
         try:
@@ -60,17 +79,21 @@ def create_lunch_deductions(month_date=None, company=None):
     result = {
         "period": f"{period_start} to {period_end}",
         "created": len(created),
-        "skipped_existing": len(skipped),
+        "skipped_existing": len(skipped_existing),
+        "no_structure": no_structure,
+        "no_structure_count": len(no_structure),
         "errors": errors,
     }
-    frappe.msgprint(
-        f"Lunch deductions: {len(created)} created, {len(skipped)} already existed, {len(errors)} failed."
-    )
-    return result
 
-def scheduled_lunch_deduction_run():
-    """Wrapper for cron — logs result instead of relying on msgprint."""
-    result = create_lunch_deductions()
-    frappe.logger("lunch_payroll").info(
-        f"Scheduled lunch deduction run: {result}"
+    msg = (
+        f"Created: {len(created)}, Already existed: {len(skipped_existing)}, "
+        f"Errors: {len(errors)}"
     )
+    if no_structure:
+        msg += (
+            f"<br><br><b>Skipped (no Salary Structure yet):</b> {len(no_structure)} employee(s)<br>"
+            + ", ".join(no_structure)
+        )
+    frappe.msgprint(msg)
+
+    return result
