@@ -40,11 +40,19 @@ def create_lunch_deductions(month_date=None, company=None):
     )
     has_structure = {a.employee for a in assigned}
 
-    created, skipped_existing, no_structure, errors = [], [], [], []
+    # Employees currently marked Active — someone who logged lunch while
+    # active but has since left shouldn't block the whole batch.
+    active_employees = set(frappe.get_all("Employee", filters={"status": "Active"}, pluck="name"))
+
+    created, skipped_existing, no_structure, inactive, errors = [], [], [], [], []
 
     for row in counts:
         employee = row.employee
         amount = flt(row.plates) * PLATE_RATE
+
+        if employee not in active_employees:
+            inactive.append(employee)
+            continue
 
         if employee not in has_structure:
             no_structure.append(employee)
@@ -72,7 +80,10 @@ def create_lunch_deductions(month_date=None, company=None):
             doc.submit()
             created.append(employee)
         except Exception as e:
-            frappe.log_error(f"Lunch deduction failed for {employee}: {e}", "Lunch Payroll Sync")
+            frappe.log_error(
+                title="Lunch deduction failed",
+                message=f"Employee: {employee}\nError: {e}"
+            )
             errors.append((employee, str(e)))
 
     frappe.db.commit()
@@ -83,6 +94,8 @@ def create_lunch_deductions(month_date=None, company=None):
         "skipped_existing": len(skipped_existing),
         "no_structure": no_structure,
         "no_structure_count": len(no_structure),
+        "inactive": inactive,
+        "inactive_count": len(inactive),
         "errors": errors,
     }
 
@@ -94,6 +107,11 @@ def create_lunch_deductions(month_date=None, company=None):
         msg += (
             f"<br><br><b>Skipped (no Salary Structure yet):</b> {len(no_structure)} employee(s)<br>"
             + ", ".join(no_structure)
+        )
+    if inactive:
+        msg += (
+            f"<br><br><b>Skipped (employee no longer active):</b> {len(inactive)} employee(s)<br>"
+            + ", ".join(inactive)
         )
     frappe.msgprint(msg)
 
