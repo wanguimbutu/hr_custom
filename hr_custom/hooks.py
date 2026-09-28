@@ -147,6 +147,13 @@ app_license = "mit"
 
 # Scheduled Tasks
 # ---------------
+doc_events = {
+	"Additional Salary": {
+		"on_submit": "hr_custom.hr_custom.salary_slip_sync.on_additional_salary_change",
+		"on_cancel": "hr_custom.hr_custom.salary_slip_sync.on_additional_salary_change",
+	}
+}
+
 scheduler_events = {
     "cron": {
         "0 6 25 * *": [

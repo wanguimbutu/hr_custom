@@ -1,6 +1,8 @@
 import frappe
 from frappe.utils import flt, get_last_day, getdate, today
 
+from hr_custom.hr_custom.salary_slip_sync import deferred_slip_refresh
+
 
 @frappe.whitelist()
 def create_recurring_deductions(month_date=None, company=None):
@@ -10,7 +12,8 @@ def create_recurring_deductions(month_date=None, company=None):
     if not company:
         company = frappe.db.get_single_value("Global Defaults", "default_company")
 
-    results = {"loans": _process_loans(period_end, company), "sacco": _process_sacco(period_end, company)}
+    with deferred_slip_refresh():
+        results = {"loans": _process_loans(period_end, company), "sacco": _process_sacco(period_end, company)}
     frappe.db.commit()
     frappe.msgprint(
         f"Loans: {results['loans']['created']} created, {results['loans']['closed']} closed. "
@@ -33,8 +36,8 @@ def _process_loans(period_end, company):
             "employee": loan.employee,
             "salary_component": "Staff Loan Repayment",
             "payroll_date": period_end,
-            "reference_doctype": "Staff Loan",
-            "reference_name": loan.name,
+            "ref_doctype": "Staff Loan",
+            "ref_docname": loan.name,
             "docstatus": ["!=", 2]
         }):
             skipped.append(loan.employee)
@@ -52,8 +55,8 @@ def _process_loans(period_end, company):
             doc.amount = amount
             doc.payroll_date = period_end
             doc.company = company or frappe.db.get_value("Employee", loan.employee, "company")
-            doc.reference_doctype = "Staff Loan"
-            doc.reference_name = loan.name
+            doc.ref_doctype = "Staff Loan"
+            doc.ref_docname = loan.name
             doc.overwrite_salary_structure_amount = 0
             doc.insert(ignore_permissions=True)
             doc.submit()
@@ -78,9 +81,9 @@ def _process_sacco(period_end, company):
     created, skipped, errors = [], [], []
 
     members = frappe.get_all(
-        "SACCO Membership",
+        "Sacco Membership",
         filters={"active": 1, "start_date": ["<=", period_end]},
-        fields=["employee", "monthly_contribution"]
+        fields=["employee", "monthy_contribution"]
     )
 
     for m in members:
@@ -93,7 +96,7 @@ def _process_sacco(period_end, company):
             skipped.append(m.employee)
             continue
 
-        if flt(m.monthly_contribution) <= 0:
+        if flt(m.monthy_contribution) <= 0:
             continue
 
         try:
@@ -101,7 +104,7 @@ def _process_sacco(period_end, company):
             doc.employee = m.employee
             doc.salary_component = "SACCO Contribution"
             doc.type = "Deduction"
-            doc.amount = m.monthly_contribution
+            doc.amount = m.monthy_contribution
             doc.payroll_date = period_end
             doc.company = company or frappe.db.get_value("Employee", m.employee, "company")
             doc.overwrite_salary_structure_amount = 0
