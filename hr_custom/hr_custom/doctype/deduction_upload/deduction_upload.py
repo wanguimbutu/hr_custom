@@ -7,7 +7,7 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import cstr, flt, get_last_day, getdate
 from frappe.utils.csvutils import read_csv_content
-from frappe.utils.xlsxutils import build_xlsx_response, read_xlsx_file_from_attached_file
+from frappe.utils.xlsxutils import read_xlsx_file_from_attached_file
 
 from hr_custom.hr_custom.salary_slip_sync import deferred_slip_refresh, get_salary_slips
 
@@ -176,7 +176,12 @@ def parse_template_rows(rows, components):
 	if emp_idx is None and name_idx is None:
 		frappe.throw(f"The file needs an '{EMPLOYEE_ID_COL}' or '{EMPLOYEE_NAME_COL}' column. Use the downloaded template.")
 
-	component_cols = [(c, col[c.lower()]) for c in components if c.lower() in col]
+	component_cols = []
+	for c in components:
+		# Match "SACCO Contribution - Amount (KES)" from the template as well as a plain "SACCO Contribution" header
+		matches = [i for name, i in col.items() if name == c.lower() or name.startswith(f"{c.lower()} - amount")]
+		if matches:
+			component_cols.append((c, matches[0]))
 	if not component_cols:
 		frappe.throw(f"None of the selected deduction columns ({', '.join(components)}) were found in the file header.")
 
@@ -231,19 +236,110 @@ def download_template(company, components, payroll_month=None):
 	frappe.has_permission("Deduction Upload", "read", throw=True)
 	components = frappe.parse_json(components) if isinstance(components, str) else components
 	if not components:
-		frappe.throw("Select at least one deduction column first.")
+		frappe.throw("Add at least one row to Deduction Columns first - each one becomes an amount column.")
 
 	employees = frappe.get_all(
 		"Employee",
 		filters={"status": "Active", "company": company},
-		fields=["name", "employee_name"],
+		fields=["name", "employee_name", "department"],
 		order_by="employee_name",
 	)
-	data = [[EMPLOYEE_ID_COL, EMPLOYEE_NAME_COL, *components, REMARKS_COL]]
-	data += [[e.name, e.employee_name, *([None] * len(components)), None] for e in employees]
+	month = getdate(payroll_month).strftime("%B %Y") if payroll_month else ""
+	currency = frappe.get_cached_value("Company", company, "default_currency") or ""
+	content = build_template_workbook(employees, components, company, month, currency)
 
-	month = getdate(payroll_month).strftime("%b-%Y") if payroll_month else "template"
-	build_xlsx_response(data, f"Deduction Upload {month}")
+	from frappe.desk.utils import provide_binary_file
+
+	provide_binary_file(f"Deduction Upload {month or 'Template'}", "xlsx", content)
+
+
+def amount_header(component, currency):
+	return f"{component} - Amount ({currency})" if currency else f"{component} - Amount"
+
+
+def build_template_workbook(employees, components, company, month, currency):
+	from io import BytesIO
+
+	from openpyxl import Workbook
+	from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+	from openpyxl.utils import get_column_letter
+	from openpyxl.worksheet.datavalidation import DataValidation
+
+	header_fill = PatternFill("solid", fgColor="1F4E78")
+	locked_fill = PatternFill("solid", fgColor="F2F2F2")
+	input_fill = PatternFill("solid", fgColor="FFF2CC")
+	thin = Side(style="thin", color="BFBFBF")
+	border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+	wb = Workbook()
+	ws = wb.active
+	ws.title = "Deductions"
+
+	headers = [EMPLOYEE_ID_COL, EMPLOYEE_NAME_COL, *[amount_header(c, currency) for c in components], REMARKS_COL]
+	ws.append(headers)
+	for cell in ws[1]:
+		cell.font = Font(bold=True, color="FFFFFF")
+		cell.fill = header_fill
+		cell.alignment = Alignment(wrap_text=True, vertical="center", horizontal="center")
+		cell.border = border
+	ws.row_dimensions[1].height = 36
+
+	first_amount_col, last_amount_col = 3, 2 + len(components)
+	remarks_col = last_amount_col + 1
+	for e in employees:
+		ws.append([e.name, e.employee_name, *([None] * len(components)), None])
+		row = ws.max_row
+		for col in range(1, remarks_col + 1):
+			cell = ws.cell(row=row, column=col)
+			cell.border = border
+			if col < first_amount_col:
+				cell.fill = locked_fill
+			elif col <= last_amount_col:
+				cell.fill = input_fill
+				cell.number_format = "#,##0.00"
+
+	# Reject text and negative numbers in the amount cells
+	last_row = max(ws.max_row, 2) + 200
+	validation = DataValidation(
+		type="decimal", operator="greaterThanOrEqual", formula1="0", allow_blank=True,
+		showErrorMessage=True, errorTitle="Invalid amount", error="Enter a number (0 or more), or leave blank.",
+	)
+	validation.add(f"{get_column_letter(first_amount_col)}2:{get_column_letter(last_amount_col)}{last_row}")
+	ws.add_data_validation(validation)
+
+	ws.column_dimensions["A"].width = 18
+	ws.column_dimensions["B"].width = 32
+	for col in range(first_amount_col, last_amount_col + 1):
+		ws.column_dimensions[get_column_letter(col)].width = 22
+	ws.column_dimensions[get_column_letter(remarks_col)].width = 30
+	ws.freeze_panes = "C2"
+
+	info = wb.create_sheet("Instructions")
+	lines = [
+		("Deduction Upload Template", True),
+		(f"Company: {company}", False),
+		(f"Payroll month: {month or '(set on the Deduction Upload form)'}", False),
+		("", False),
+		("How to fill it in", True),
+		("1. Go to the 'Deductions' sheet. Each row is one active employee.", False),
+		("2. Type the amount to deduct in the yellow cells - one column per deduction type:", False),
+		*[(f"      - {c}", False) for c in components],
+		("3. Leave a cell blank (or 0) if the employee has no such deduction this month.", False),
+		("4. Employees not listed: add a new row with their Employee ID (or exact full name).", False),
+		("5. Do not rename or delete the header row. You may delete rows you don't need.", False),
+		("6. Save as .xlsx and attach it to the 'Filled Template' field on the Deduction Upload form.", False),
+		("   The rows load automatically - check them, then Submit.", False),
+	]
+	for text, bold in lines:
+		info.append([text])
+		if bold:
+			info.cell(row=info.max_row, column=1).font = Font(bold=True, size=12 if info.max_row > 1 else 14)
+	info.column_dimensions["A"].width = 100
+
+	wb.active = 0
+	out = BytesIO()
+	wb.save(out)
+	return out.getvalue()
 
 
 @frappe.whitelist()
