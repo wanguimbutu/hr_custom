@@ -43,7 +43,7 @@
   },
   {
    "fieldname": "components",
-   "fieldtype": "Table MultiSelect",
+   "fieldtype": "Table",
    "label": "Deduction Columns",
    "options": "Deduction Upload Component",
    "reqd": 1,
@@ -104,7 +104,7 @@
  ],
  "is_submittable": 1,
  "links": [],
- "modified": "2026-09-29 10:00:00.000000",
+ "modified": "2026-09-29 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "hr custom",
  "name": "Deduction Upload",
