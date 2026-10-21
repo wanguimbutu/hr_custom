@@ -102,7 +102,7 @@ def _process_sacco(period_end, company):
         try:
             doc = frappe.new_doc("Additional Salary")
             doc.employee = m.employee
-            doc.salary_component = "SACCO Contribution"
+            doc.salary_component = "Sacco Savings"
             doc.type = "Deduction"
             doc.amount = m.monthy_contribution
             doc.payroll_date = period_end
