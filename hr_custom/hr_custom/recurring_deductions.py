@@ -89,7 +89,7 @@ def _process_sacco(period_end, company):
     for m in members:
         if frappe.db.exists("Additional Salary", {
             "employee": m.employee,
-            "salary_component": "SACCO Contribution",
+            "salary_component": "Sacco Savings",
             "payroll_date": period_end,
             "docstatus": ["!=", 2]
         }):
